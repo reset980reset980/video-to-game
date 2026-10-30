@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Box Fort · 숨바꼭질 AI</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #c9ccd1; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .ui { position: fixed; pointer-events: none; color: #1d2733; }
+  #top { top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+    background: #ffffffd0; border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px #0002; }
+  #top .h { color: #0f8fc0; } #top .s { color: #d8303f; } #top .t { min-width: 64px; text-align: center; color: #3b4652; }
+  #panel { top: 14px; right: 14px; width: 250px; background: #ffffffd8; border-radius: 12px; padding: 10px 12px; font-size: 12px; box-shadow: 0 2px 12px #0002; }
+  #panel h3 { margin: 0 0 6px; font-size: 12px; color: #55606c; font-weight: 600; display: flex; justify-content: space-between; }
+  .ag { margin: 7px 0; } .ag .n { font-weight: 700; } .ag .p { color: #3b4652; }
+  .bar { display: grid; grid-template-columns: 1fr 34px; gap: 4px; align-items: center; margin-top: 2px; color: #66717d; font-size: 11px; }
+  .bar i { display: block; height: 5px; border-radius: 3px; background: #dfe3e8; overflow: hidden; }
+  .bar i b { display: block; height: 100%; }
+  #brain { bottom: 12px; left: 14px; font-size: 12px; background: #ffffffc8; border-radius: 8px; padding: 5px 10px; }
+  #help { bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #3b4652; background: #ffffffb0; border-radius: 8px; padding: 5px 10px; }
+  #title, #end { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #c9ccd170; }
+  .card { background: #fffffff2; border-radius: 16px; padding: 24px 28px; width: min(420px, calc(100vw - 32px)); box-shadow: 0 8px 40px #0003; color: #1d2733; }
+  .card h1 { margin: 0 0 4px; font-size: 26px; } .card p { margin: 6px 0 14px; color: #55606c; font-size: 14px; line-height: 1.5; }
+  .card button { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 15px; border-radius: 10px; border: 1px solid #c9d1da;
+    background: #f4f7fa; cursor: pointer; text-align: left; color: #1d2733; }
+  .card button:hover, .card button:focus-visible { background: #e6f5fb; border-color: #0f8fc0; outline: none; }
+  .card kbd { display: inline-block; min-width: 18px; text-align: center; font: 12px ui-monospace, monospace; background: #e8ecf0; border-radius: 4px; padding: 1px 5px; margin-right: 8px; }
+  .card input { width: 100%; box-sizing: border-box; padding: 9px; border-radius: 8px; border: 1px solid #c9d1da; font-size: 14px; margin-top: 4px; }
+  .card small { color: #66717d; font-size: 12px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 700px) { #panel { width: 190px; font-size: 11px; } #help { display: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="top" class="ui" hidden><span class="h" id="sh">0</span><span class="t" id="tm">준비</span><span class="s" id="ss">0</span></div>
+<div id="panel" class="ui" hidden><h3><span>AI 판단</span><span id="dec">0회</span></h3><div id="agents"></div></div>
+<div id="brain" class="ui" hidden></div>
+<div id="help" class="ui" hidden>WASD 이동 · Space 꾹 잡기 · E 잠금 · R 경사로 회전 · H 패널 · Esc 메뉴</div>
+<div id="title">
+  <div class="card">
+    <h1>Box Fort</h1>
+    <p>파랑 팀은 상자와 경사로로 숨을 곳을 만들고, 빨강 팀은 찾아냅니다. 다른 캐릭터는 모두 AI가 판단합니다.</p>
+    <button data-mode="hider"><kbd>1</kbd>파랑 팀으로 숨기</button>
+    <button data-mode="seeker"><kbd>2</kbd>빨강 팀으로 찾기</button>
+    <button data-mode="watch"><kbd>3</kbd>AI끼리 관전</button>
+    <div id="codeBox" hidden><small>Jev 접속 코드</small><input id="code" type="password" autocomplete="off"></div>
+    <p style="margin:12px 0 0"><small id="brainTitle">AI 연결 확인 중…</small></p>
+  </div>
+</div>
+<div id="end" hidden><div class="card"><h1 id="endTitle"></h1><p id="endText"></p><small>Enter 다시 · Esc 메뉴</small></div></div>
+<script type="module">
+// Box Fort: a hide-and-seek game with boxes, ramps and locks, after a clip of agents playing hide-and-seek.
+// Contract for the playtest: ?autostart (= watch), ?mode=hider|seeker|watch, ?seed=N, ?brain=local|jev,
+// ?jev=URL, ?prep=s, ?hunt=s; window.__game.state is read-only.
+// Every AI character is driven by a "brain": Jev (TypeSafe System One, through /api/jev) when a key is set on the
+// server, otherwise a local utility brain with the same options. The brain picks a plan; the body walks, pushes,
+// drags, locks and climbs.
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const Q = new URLSearchParams(location.search);
+let seed0 = +(Q.get('seed') || 1);
+let seed = seed0;
+const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const PREP = +(Q.get('prep') || 16), HUNT = +(Q.get('hunt') || 40);
+const STEPS = clamp(+(Q.get('timescale') || 1) | 0, 1, 16);   // debug: simulate N fixed steps per frame
+
+// sampled from the clip: pale tiles, white walls, grey block city, warm yellow props, glowing red and cyan agents
+const PALETTE = { bg: 0xc4c8ce, floor: 0xdfe1e4, line: 0xc6cace, wall: 0xeceef0, wallTop: 0xf7f8f9, city: 0xb8bcc2,
+  box: 0xf2b324, locked: 0x8f7134, hider: 0x38c6ff, seeker: 0xff3d4f };
+
+// ---------- renderer, look ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(PALETTE.bg);
+scene.fog = new THREE.Fog(PALETTE.bg, 26, 62);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+
+scene.add(new THREE.HemisphereLight(0xf4f7fb, 0x9aa0a8, 1.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1.9);
+sun.position.set(-8, 22, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 60 });
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0.45, 0.93);
+composer.addPass(bloom);
+const grade = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uLift: { value: new THREE.Vector3(0.0, 0.006, 0.018) },
+    uGain: { value: new THREE.Vector3(0.99, 1.0, 1.03) }, uVignette: { value: 0.28 }, uGrain: { value: 0.022 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uVignette, uGrain; uniform vec3 uLift, uGain; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; c = c * uGain + uLift;
+      c *= 1. - uVignette * smoothstep(.35, .95, length(vUv - .5) * 1.25);
+      c += (h(vUv * 999. + uTime) - .5) * uGrain; gl_FragColor = vec4(c, 1.); }`,
+});
+composer.addPass(grade);
+composer.addPass(new OutputPass());
+
+// ---------- arena ----------
+// x to the right, z toward the camera. The fort room is the corner x,z in [2,10] with door A (top) and door B (left).
+const HALF = 10, WALL_H = 1.1, BOX = 1.4, RAMP_L = 2.4, RAMP_W = 1.4, R = 0.34;
+const WALLS = [
+  { x0: -10.4, z0: -10.4, x1: 10.4, z1: -10 }, { x0: -10.4, z0: 10, x1: 10.4, z1: 10.4 },
+  { x0: -10.4, z0: -10, x1: -10, z1: 10 }, { x0: 10, z0: -10, x1: 10.4, z1: 10 },
+  { x0: 1.8, z0: 1.8, x1: 5, z1: 2.2 }, { x0: 7, z0: 1.8, x1: 10, z1: 2.2 },          // room top wall, door A gap x 5..7
+  { x0: 1.8, z0: 2.2, x1: 2.2, z1: 5 }, { x0: 1.8, z0: 7, x1: 2.2, z1: 10 },          // room left wall, door B gap z 5..7
+  { x0: -4.2, z0: -1, x1: -3.8, z1: 5 }, { x0: -2, z0: -6.2, x1: 3.5, z1: -5.8 },     // two cover walls outside
+].map(w => ({ ...w, h: WALL_H }));
+// a box plugs a doorway by sitting in the gap; it is staged outside, then pulled in from the room side
+const DOORS = {
+  A: { x: 6, z: 2, n: [0, 1], plug: { x: 6, z: 2 }, stage: { x: 6, z: 0.1 }, out: { x: 6, z: 0.4 }, look: { x: 6, z: 4 } },
+  B: { x: 2, z: 6, n: [1, 0], plug: { x: 2, z: 6 }, stage: { x: 0.1, z: 6 }, out: { x: 0.4, z: 6 }, look: { x: 4, z: 6 } },
+};
+const inRoom = (x, z) => x > 2.2 && z > 2.2 && x < 10 && z < 10;
+// ramp spots against the outside of the room walls, high end toward the wall
+const RAMP_SPOTS = [
+  { id: 'W1a', x: 3.5, z: 1.78 - RAMP_L / 2, dir: 1 }, { id: 'W1b', x: 8.5, z: 1.78 - RAMP_L / 2, dir: 1 },
+  { id: 'W2a', x: 1.78 - RAMP_L / 2, z: 3.5, dir: 0 }, { id: 'W2b', x: 1.78 - RAMP_L / 2, z: 8.5, dir: 0 },
+];
+
+const floorTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d2d6db'; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = '#c4c8cd'; g.lineWidth = 4; g.strokeRect(0, 0, 256, 256);
+  g.strokeStyle = '#d3d6da'; g.lineWidth = 2; g.beginPath(); g.moveTo(128, 0); g.lineTo(128, 256); g.moveTo(0, 128); g.lineTo(256, 128); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 10);
+  t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const under = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0xaeb2b8, roughness: 1 }));
+under.rotation.x = -Math.PI / 2; under.position.y = -0.02; under.receiveShadow = true; scene.add(under);
+
+const wallMat = new THREE.MeshStandardMaterial({ color: 0xd9dce0, roughness: 0.8 });
+for (const w of WALLS) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w.x1 - w.x0, w.h, w.z1 - w.z0), wallMat);
+  m.position.set((w.x0 + w.x1) / 2, w.h / 2, (w.z0 + w.z1) / 2); m.castShadow = m.receiveShadow = true; scene.add(m);
+}
+// the grey block city around the arena, as in the clip: instanced, grouped in rows, quieter with distance
+{
+  const geo = new THREE.BoxGeometry(1, 1, 1), mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+  const list = [];
+  for (let x = -34; x <= 34; x += 1.6) for (let z = -34; z <= 30; z += 1.6) {
+    if (Math.abs(x) < 11.6 && Math.abs(z) < 11.6) continue;
+    const d = Math.max(Math.abs(x), Math.abs(z));
+    if (rand() < 0.18) continue;
+    list.push([x + (rand() - .5) * .2, z + (rand() - .5) * .2, 0.25 + rand() * rand() * (d < 15 ? 1.6 : 3.2)]);
+  }
+  const city = new THREE.InstancedMesh(geo, mat, list.length), o = new THREE.Object3D(), col = new THREE.Color();
+  list.forEach(([x, z, h], i) => {
+    o.position.set(x, h / 2 - 0.02, z); o.scale.set(1.45, h, 1.45); o.updateMatrix(); city.setMatrixAt(i, o.matrix);
+    city.setColorAt(i, col.setHex(PALETTE.city).offsetHSL(0, 0, (rand() - .5) * 0.08));
+  });
+  city.receiveShadow = true; city.castShadow = false; scene.add(city);
+}
+
+// ---------- props ----------
+const boxGeo = new THREE.BoxGeometry(BOX, WALL_H, BOX);
+const rampGeo = (() => {   // wedge: low end at -L/2, high end at +L/2 along +x (dir 0)
+  const s = new THREE.Shape(); s.moveTo(-RAMP_L / 2, 0); s.lineTo(RAMP_L / 2, 0); s.lineTo(RAMP_L / 2, WALL_H); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: RAMP_W, bevelEnabled: false }); g.translate(0, 0, -RAMP_W / 2); return g;
+})();
+const xLines = (w, h, d) => {   // edges plus an X on each side face, the "locked" marking from the clip
+  const p = [], X = w / 2, Y = h, Z = d / 2;
+  const quad = (a, b, c, e) => p.push(...a, ...c, ...b, ...e);
+  quad([-X, 0, Z], [X, 0, Z], [X, Y, Z], [-X, Y, Z]); quad([-X, 0, -Z], [X, 0, -Z], [X, Y, -Z], [-X, Y, -Z]);
+  quad([X, 0, -Z], [X, 0, Z], [X, Y, Z], [X, Y, -Z]); quad([-X, 0, -Z], [-X, 0, Z], [-X, Y, Z], [-X, Y, -Z]);
+  quad([-X, Y, -Z], [X, Y, -Z], [X, Y, Z], [-X, Y, Z]);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); return g;
+};
+const lockGeo = xLines(BOX + 0.02, WALL_H + 0.01, BOX + 0.02);
+
+function makeObj(id, type, x, z, dir = 0) {
+  const mat = new THREE.MeshStandardMaterial({ color: PALETTE.box, roughness: 0.45, emissive: 0x000000 });
+  const mesh = new THREE.Mesh(type === 'box' ? boxGeo : rampGeo, mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  const lines = new THREE.LineSegments(type === 'box' ? lockGeo : new THREE.EdgesGeometry(rampGeo),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));
+  lines.visible = false;
+  const g = new THREE.Group(); g.add(mesh, lines); scene.add(g);
+  if (type === 'box') mesh.position.y = WALL_H / 2;
+  return { id, type, x, z, dir, lockedBy: null, g, mesh, lines, mat };
+}
+function objHalf(o) { if (o.type === 'box') return [BOX / 2, BOX / 2]; return o.dir % 2 === 0 ? [RAMP_L / 2, RAMP_W / 2] : [RAMP_W / 2, RAMP_L / 2]; }
+function objRect(o, x = o.x, z = o.z) { const [hx, hz] = objHalf(o); return { x0: x - hx, z0: z - hz, x1: x + hx, z1: z + hz }; }
+const DIRV = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+
+// ---------- agents ----------
+function makeAgent(id, team, x, z, name) {
+  const color = team === 'hider' ? PALETTE.hider : PALETTE.seeker;
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.55, roughness: 0.35 });
+  const g = new THREE.Group();
+  const look = new THREE.Group(); look.scale.setScalar(1.22); g.add(look);   // drawn a little larger than the collider, as in the clip
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.32, 6, 12), mat); body.position.y = 0.42;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 20, 16), mat); head.position.y = 0.92;
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), eyeMat), e2 = e1.clone();
+  e1.position.set(0.1, 0.96, 0.21); e2.position.set(-0.1, 0.96, 0.21);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.36, 0.46, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02;
+  for (const m of [body, head]) m.castShadow = true;
+  look.add(body, head, e1, e2); g.add(ring); scene.add(g);
+  let cone = null;
+  if (team === 'seeker') {   // the vision fan on the floor, faint
+    cone = new THREE.Mesh(new THREE.CircleGeometry(VIEW_R, 32, -VIEW_A, VIEW_A * 2),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.07, depthWrite: false }));
+    cone.rotation.x = -Math.PI / 2; scene.add(cone);
+  }
+  return { id, team, name, x, z, y: 0, vy: 0, face: team === 'hider' ? -Math.PI / 2 : Math.PI / 4, held: null, grab: [0, 0],
+    plan: null, human: false, g, body, head, ring, cone, mat, seen: false, lastSeenBy: 0, decision: null, stuck: 0, moved: 0 };
+}
+const VIEW_R = 15, VIEW_A = 1.2;
+
+// lasers from a seeker to each hider it sees
+const laserMat = new THREE.MeshBasicMaterial({ color: 0xff3d4f, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+const lasers = Array.from({ length: 6 }, () => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 6, 1, true), laserMat); m.visible = false; scene.add(m); return m; });
+
+// ---------- world state ----------
+const G = { phase: 'title', mode: 'watch', t: 0, score: { hider: 0, seeker: 0 }, tick: 0, agents: [], objs: [], decisions: 0, endT: 0, winner: '' };
+
+function clearWorld() {
+  for (const a of G.agents) { scene.remove(a.g); if (a.cone) scene.remove(a.cone); }
+  for (const o of G.objs) scene.remove(o.g);
+  G.agents = []; G.objs = [];
+}
+function newRound(mode) {
+  clearWorld();
+  seed = seed0;
+  const j = () => (rand() - 0.5) * 1.6;
+  G.objs.push(makeObj('box1', 'box', 4.2 + j(), -1.2 + j()));
+  G.objs.push(makeObj('box2', 'box', -0.8 + j(), 4.6 + j()));
+  G.objs.push(makeObj('box3', 'box', 7.2 + j() * .5, 7.6 + j() * .5));
+  G.objs.push(makeObj('ramp', 'ramp', -6.5 + j(), 1.5 + j() * 2, Math.floor(rand() * 4)));
+  G.agents.push(makeAgent('h1', 'hider', 5.5 + j(), -2.8 + j(), '파랑1'));
+  G.agents.push(makeAgent('h2', 'hider', 0.8 + j(), 2.6 + j(), '파랑2'));
+  G.agents.push(makeAgent('s1', 'seeker', -7.5 + j() * .5, -7.5 + j() * .5, '빨강1'));
+  G.agents.push(makeAgent('s2', 'seeker', -8 + j() * .5, -4 + j() * .5, '빨강2'));
+  G.mode = mode; G.t = 0; G.tick = 0; G.score = { hider: 0, seeker: 0 }; G.decisions = 0;
+  if (mode === 'hider') G.agents[0].human = true;
+  if (mode === 'seeker') G.agents[2].human = true;
+  for (const a of G.agents) a.g.position.set(a.x, 0, a.z);
+  for (const o of G.objs) syncObj(o);
+  brain.reset();
+  G.phase = 'prep';
+}
+const human = () => G.agents.find(a => a.human);
+
+// ---------- physics: heights, collisions, pushing, dragging ----------
+const inside = (r, x, z) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
+const overlap = (a, b, m = 0) => a.x0 < b.x1 - m && a.x1 > b.x0 + m && a.z0 < b.z1 - m && a.z1 > b.z0 + m;
+function heightAt(x, z, skip) {
+  let h = 0;
+  for (const w of WALLS) if (inside(w, x, z)) h = Math.max(h, w.h);
+  for (const o of G.objs) {
+    if (o === skip || !inside(objRect(o), x, z)) continue;
+    if (o.type === 'box') h = Math.max(h, WALL_H);
+    else { const [dx, dz] = DIRV[o.dir]; const u = ((x - o.x) * dx + (z - o.z) * dz) / RAMP_L + 0.5; h = Math.max(h, clamp(u, 0, 1) * WALL_H); }
+  }
+  return h;
+}
+function circleHeight(x, z, r, skip) {
+  let h = heightAt(x, z, skip);
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; h = Math.max(h, heightAt(x + Math.cos(a) * r, z + Math.sin(a) * r, skip)); }
+  return h;
+}
+function circleRect(x, z, r, rc) { const cx = clamp(x, rc.x0, rc.x1), cz = clamp(z, rc.z0, rc.z1); return (x - cx) ** 2 + (z - cz) ** 2 < r * r; }
+function riders(o) { const rc = objRect(o); return G.agents.filter(a => a.y > 0.6 && inside(rc, a.x, a.z)); }
+function objFree(o, nx, nz, mover) {
+  if (o.lockedBy) return false;
+  const rc = objRect(o, nx, nz);
+  if (rc.x0 < -10 || rc.x1 > 10 || rc.z0 < -10 || rc.z1 > 10) return false;
+  for (const w of WALLS) if (overlap(rc, w)) return false;
+  for (const p of G.objs) if (p !== o && overlap(rc, objRect(p), 0.02)) return false;
+  const ride = riders(o);
+  for (const a of G.agents) if (a !== mover && !ride.includes(a) && a.y < 0.6 && circleRect(a.x, a.z, R * 0.9, rc)) return false;
+  return true;
+}
+function moveObj(o, dx, dz, mover) {
+  if (!objFree(o, o.x + dx, o.z + dz, mover)) return false;
+  const ride = riders(o).filter(a => a !== mover);
+  o.x += dx; o.z += dz;
+  for (const a of ride) { a.x += dx; a.z += dz; }   // a box carries whoever stands on it
+  return true;
+}
+function tryMove(a, dx, dz) {
+  const canShove = a.human;
+  const nx = a.x + dx, nz = a.z + dz;
+  if (a.held && !objFree(a.held, a.held.x + dx, a.held.z + dz, a)) return false;
+  let h = circleHeight(nx, nz, R, a.held);
+  if (h > a.y + 0.36) {
+    if (a.held || a.y > 0.5 || !canShove) return false;
+    // shove: a free prop in the way moves with us
+    const pushed = G.objs.find(o => !o.lockedBy && circleRect(nx, nz, R, objRect(o)));
+    if (!pushed || !moveObj(pushed, dx * 0.85, dz * 0.85, a)) return false;
+    h = circleHeight(nx, nz, R);
+    if (h > a.y + 0.36) return false;
+  }
+  for (const b of G.agents) if (b !== a && Math.abs(b.y - a.y) < 0.6 && (b.x - nx) ** 2 + (b.z - nz) ** 2 < (R * 1.7) ** 2
+    && (b.x - nx) ** 2 + (b.z - nz) ** 2 < (b.x - a.x) ** 2 + (b.z - a.z) ** 2) return false;
+  if (a.held) { a.held.x += dx; a.held.z += dz; }
+  a.x = nx; a.z = nz;
+  return true;
+}
+function stepAgent(a, vx, vz, dt) {
+  const dx = vx * dt, dz = vz * dt;
+  let ok = false;
+  if (dx || dz) ok = tryMove(a, dx, dz) || tryMove(a, dx, 0) || tryMove(a, 0, dz);
+  a.moved = ok ? Math.hypot(dx, dz) : 0;
+  const ground = heightAt(a.x, a.z, a.held);
+  if (ground >= a.y - 0.05 && ground <= a.y + 0.4) { a.y = ground; a.vy = 0; }
+  else if (ground < a.y) { a.vy -= 22 * dt; a.y = Math.max(ground, a.y + a.vy * dt); if (a.y === ground) a.vy = 0; }
+  if (Math.hypot(vx, vz) > 0.2 && !a.held) a.face = Math.atan2(vz, vx);
+  else if (Math.hypot(vx, vz) > 0.2 && a.held) a.face = Math.atan2(a.held.z - a.z, a.held.x - a.x);
+}
+function reachable(a, o) {
+  const rc = objRect(o);
+  if (a.y > 0.6 && inside(rc, a.x, a.z)) return true;   // standing on it: can grab it and ride (box surfing)
+  return Math.abs(a.y - 0) < 0.5 && circleRect(a.x, a.z, R + 0.42, rc);
+}
+function nearestReachable(a) {
+  let best = null, bd = 1e9;
+  for (const o of G.objs) if (reachable(a, o)) { const d = Math.hypot(o.x - a.x, o.z - a.z); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+function grab(a, o) {
+  if (!o || !reachable(a, o)) return false;
+  if (o.lockedBy) return false;
+  a.held = o; a.grab = [o.x - a.x, o.z - a.z]; sfx('grab'); return true;
+}
+function release(a) { a.held = null; }
+function toggleLock(a, o) {
+  if (!o || !reachable(a, o)) return false;
+  if (!o.lockedBy) { for (const b of G.agents) if (b.held === o) release(b); o.lockedBy = a.team; sfx('lock'); return true; }
+  if (o.lockedBy === a.team) { o.lockedBy = null; sfx('unlock'); return true; }
+  return false;
+}
+function rotateRamp(o, a) {
+  if (o.type !== 'ramp' || o.lockedBy) return false;
+  const old = o.dir; o.dir = (o.dir + 1) % 4;
+  if (!objFree(o, o.x, o.z, null)) { o.dir = old; return false; }
+  if (a && a.held === o) a.grab = [o.x - a.x, o.z - a.z];
+  return true;
+}
+
+// ---------- vision ----------
+function segHitsRect(ax, ay, az, bx, by, bz, rc, top) {   // slab test, then height of the sight line at entry and exit
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dz = bz - az;
+  for (const [p, d, lo, hi] of [[ax, dx, rc.x0, rc.x1], [az, dz, rc.z0, rc.z1]]) {
+    if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return false; continue; }
+    let u0 = (lo - p) / d, u1 = (hi - p) / d; if (u0 > u1) [u0, u1] = [u1, u0];
+    t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); if (t0 > t1) return false;
+  }
+  return Math.min(ay + (by - ay) * t0, ay + (by - ay) * t1) < top;
+}
+function sees(s, h) {
+  const dx = h.x - s.x, dz = h.z - s.z, d = Math.hypot(dx, dz);
+  if (d > VIEW_R) return false;
+  if (d > 1.2 && Math.abs(Math.atan2(Math.sin(Math.atan2(dz, dx) - s.face), Math.cos(Math.atan2(dz, dx) - s.face))) > VIEW_A) return false;
+  const ey = s.y + 0.95, ty = h.y + 0.75;
+  for (const w of WALLS) if (!(s.y > 0.6 && inside(w, s.x, s.z)) && segHitsRect(s.x, ey, s.z, h.x, ty, h.z, w, w.h)) return false;
+  for (const o of G.objs) {
+    const rc = objRect(o);
+    if (inside(rc, s.x, s.z) || inside(rc, h.x, h.z)) continue;
+    if (segHitsRect(s.x, ey, s.z, h.x, ty, h.z, rc, o.type === 'box' ? WALL_H : WALL_H * 0.7)) return false;
+  }
+  return true;
+}
+
+// ---------- navigation: A* on a 0.5 m grid over the floor ----------
+const CELL = 0.5, N = 44, OFF = 11;
+function occGrid(skip, inflate) {
+  const occ = new Uint8Array(N * N);
+  const rects = WALLS.map(w => w).concat(G.objs.filter(o => !skip.includes(o)).map(o => objRect(o)));
+  for (let i = 0; i < N; i++) for (let k = 0; k < N; k++) {
+    const x = i * CELL - OFF + CELL / 2, z = k * CELL - OFF + CELL / 2;
+    if (x < -9.7 || x > 9.7 || z < -9.7 || z > 9.7) { occ[i * N + k] = 1; continue; }
+    for (const r of rects) if (circleRect(x, z, inflate, r)) { occ[i * N + k] = 1; break; }
+  }
+  return occ;
+}
+const cellOf = (x, z) => [clamp(Math.floor((x + OFF) / CELL), 0, N - 1), clamp(Math.floor((z + OFF) / CELL), 0, N - 1)];
+const centerOf = (i, k) => ({ x: i * CELL - OFF + CELL / 2, z: k * CELL - OFF + CELL / 2 });
+function nearestFree(occ, i, k) {
+  if (!occ[i * N + k]) return [i, k];
+  for (let r = 1; r < 8; r++) for (let di = -r; di <= r; di++) for (let dk = -r; dk <= r; dk++) {
+    const a = i + di, b = k + dk; if (a >= 0 && b >= 0 && a < N && b < N && !occ[a * N + b]) return [a, b];
+  }
+  return [i, k];
+}
+function findPath(from, to, skip = [], inflate = R + 0.08) {
+  const occ = occGrid(skip, inflate);
+  const [si, sk] = nearestFree(occ, ...cellOf(from.x, from.z)), [ti, tk] = nearestFree(occ, ...cellOf(to.x, to.z));
+  const start = si * N + sk, goal = ti * N + tk;
+  const g = new Float32Array(N * N).fill(1e9), came = new Int32Array(N * N).fill(-1), open = [start], inOpen = new Uint8Array(N * N);
+  g[start] = 0; inOpen[start] = 1;
+  const hh = c => Math.hypot((c / N | 0) - ti, (c % N) - tk);
+  let guard = 0;
+  while (open.length && guard++ < 4000) {
+    let bi = 0; for (let i = 1; i < open.length; i++) if (g[open[i]] + hh(open[i]) < g[open[bi]] + hh(open[bi])) bi = i;
+    const c = open.splice(bi, 1)[0]; inOpen[c] = 0;
+    if (c === goal) break;
+    const ci = c / N | 0, ck = c % N;
+    for (let di = -1; di <= 1; di++) for (let dk = -1; dk <= 1; dk++) {
+      if (!di && !dk) continue;
+      const ni = ci + di, nk = ck + dk; if (ni < 0 || nk < 0 || ni >= N || nk >= N) continue;
+      const n = ni * N + nk; if (occ[n]) continue;
+      if (di && dk && (occ[ci * N + nk] || occ[ni * N + ck])) continue;
+      const ng = g[c] + (di && dk ? 1.414 : 1);
+      if (ng < g[n]) { g[n] = ng; came[n] = c; if (!inOpen[n]) { open.push(n); inOpen[n] = 1; } }
+    }
+  }
+  if (came[goal] < 0 && goal !== start) return null;
+  const cells = []; for (let c = goal; c >= 0 && c !== start; c = came[c]) cells.push(c);
+  cells.reverse();
+  // string-pull: keep a waypoint only where the straight line would cross an occupied cell
+  const pts = cells.map(c => centerOf(c / N | 0, c % N));
+  const clear = (a, b) => { const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.2); for (let i = 1; i < n; i++) { const [ci, ck] = cellOf(a.x + (b.x - a.x) * i / n, a.z + (b.z - a.z) * i / n); if (occ[ci * N + ck]) return false; } return true; };
+  const out = []; let cur = from;
+  for (let i = 0; i < pts.length; i++) if (i === pts.length - 1 || !clear(cur, pts[i + 1])) { out.push(pts[i]); cur = pts[i]; }
+  out.push({ x: to.x, z: to.z });
+  return out;
+}
+
+// ---------- the body: carry out a plan chosen by the brain ----------
+const SPEED = 4.0, CARRY = 2.8;
+function steerTo(a, p, speed = SPEED) {
+  const dx = p.x - a.x, dz = p.z - a.z, d = Math.hypot(dx, dz);
+  if (d < 0.05) return [0, 0];
+  const s = Math.min(speed, d * 6);
+  return [dx / d * s, dz / d * s];
+}
+function followPath(a, target, skip, dt, speed = SPEED, inflate) {
+  const P = a.plan;
+  P.repath = (P.repath || 0) - dt;
+  if (!P.path || P.repath <= 0 || Math.hypot((P.pathTo?.x ?? 1e9) - target.x, (P.pathTo?.z ?? 1e9) - target.z) > 0.4) {
+    P.path = findPath(a, target, skip, inflate); P.pathTo = { ...target }; P.repath = 0.6;
+  }
+  if (!P.path) return steerTo(a, target, speed);
+  while (P.path.length > 1 && Math.hypot(P.path[0].x - a.x, P.path[0].z - a.z) < 0.35) P.path.shift();
+  return steerTo(a, P.path[0], speed);
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const objById = id => G.objs.find(o => o.id === id);
+const agentById = id => G.agents.find(a => a.id === id);
+function doorBlocker(door) {
+  const d = DOORS[door];
+  return G.objs.find(o => circleRect(d.x, d.z, 0.8, objRect(o)) || dist(o, d.plug) < 0.75) || null;
+}
+const doorSealed = door => { const b = doorBlocker(door); return !!b && b.type === 'box' && dist(b, DOORS[door].plug) < 0.45; };
+function hidingSpot(a) {
+  // the room point farthest from both doors and from every seeker, away from other hiders
+  let best = null, bs = -1e9;
+  for (let x = 3; x <= 9.4; x += 0.8) for (let z = 3; z <= 9.4; z += 0.8) {
+    if (circleHeight(x, z, R) > 0.1) continue;
+    let s = Math.min(dist({ x, z }, DOORS.A.look), dist({ x, z }, DOORS.B.look)) * 1.2;
+    for (const b of G.agents) if (b !== a && b.team === 'hider') s -= Math.max(0, 1.6 - dist(b, { x, z })) * 2;
+    if (s > bs) { bs = s; best = { x, z }; }
+  }
+  return best || { x: 8.5, z: 8.5 };
+}
+function fleeSpot(a) {
+  let best = { x: a.x, z: a.z }, bs = -1e9;
+  for (let i = 0; i < 28; i++) {
+    const p = { x: clamp(a.x + (rand() - .5) * 10, -9.3, 9.3), z: clamp(a.z + (rand() - .5) * 10, -9.3, 9.3) };
+    if (circleHeight(p.x, p.z, R) > 0.1) continue;
+    let s = -dist(a, p) * 0.15;
+    for (const sk of G.agents) if (sk.team === 'seeker') { s += Math.min(dist(sk, p), 10) * 0.4; if (sees({ ...sk, face: Math.atan2(p.z - sk.z, p.x - sk.x) }, { x: p.x, z: p.z, y: 0 })) s -= 4; }
+    if (inRoom(p.x, p.z)) s += 2;
+    if (s > bs) { bs = s; best = p; }
+  }
+  return best;
+}
+
+// Carry a prop: plan the route for the prop's footprint, grab it from the side facing away from the route,
+// then walk so the prop follows the route. Returns null when the prop cannot be grabbed (the plan then ends).
+function carry(a, o, target, dt) {
+  const P = a.plan, [hx, hz] = objHalf(o);
+  P.cre = (P.cre || 0) - dt;
+  if (!P.cpath || P.cre <= 0) { P.cpath = findPath(o, target, [o], Math.max(hx, hz) + 0.05) || findPath(o, target, [o], Math.min(hx, hz) + 0.12) || [target]; P.cre = 0.8; }
+  while (P.cpath.length > 1 && Math.hypot(P.cpath[0].x - o.x, P.cpath[0].z - o.z) < 0.3) P.cpath.shift();
+  const w = P.cpath[0];
+  if (!a.held) {
+    const vx = w.x - o.x, vz = w.z - o.z, d = Math.hypot(vx, vz) || 1;
+    const sides = [[1, 0, hx], [-1, 0, hx], [0, 1, hz], [0, -1, hz]].map(([sx, sz, h]) => ({ x: o.x + sx * (h + R + 0.12), z: o.z + sz * (h + R + 0.12), score: -(sx * vx + sz * vz) / d }))
+      .filter(p => Math.abs(p.x) < 9.6 && Math.abs(p.z) < 9.6 && circleHeight(p.x, p.z, R, o) < 0.1).sort((p, q) => q.score - p.score);
+    if (!sides.length) return null;
+    if (!P.side || P.side.score !== sides[0].score) P.side = sides[0];
+    if (dist(a, P.side) > 0.25) return followPath(a, P.side, [], dt);
+    if (!grab(a, o)) return null;
+  }
+  return steerTo(a, { x: w.x - a.grab[0], z: w.z - a.grab[1] }, CARRY);
+}
+
+// A plan is { key, kind, ...args, stage }. runPlan returns the velocity for this frame and finishes plans.
+function runPlan(a, dt) {
+  const P = a.plan;
+  if (!P) return [0, 0];
+  P.t = (P.t || 0) + dt;
+  const done = () => { if (a.held) release(a); P.done = true; return [0, 0]; };
+  if (P.kind === 'goto') {
+    if (!P.tgt || (P.retarget && P.t - (P.tgtAt || 0) > 0.8)) { P.tgt = P.target(); P.tgtAt = P.t; }
+    if (dist(a, P.tgt) < 0.3) {
+      if (P.scan) a.face += dt * 1.6;
+      if (!P.hold && (P.arrived = (P.arrived || 0) + dt) > (P.scan ? 1.5 : 0.2)) return done();
+      return [0, 0];
+    }
+    if (P.t > 12) return done();
+    return followPath(a, P.tgt, [], dt);
+  }
+  if (P.kind === 'plug') {
+    const o = objById(P.obj), D = DOORS[P.door];
+    if (!o || (o.lockedBy && o.lockedBy !== a.team)) return done();
+    if (dist(o, D.plug) < 0.12) {
+      if (a.held) release(a);
+      if (!o.lockedBy) { if (reachable(a, o)) toggleLock(a, o); else return followPath(a, D.look, [], dt); }
+      return done();
+    }
+    if (o.lockedBy === a.team && !a.held) { if (reachable(a, o)) toggleLock(a, o); else return followPath(a, o, [], dt); }
+    const [nx, nz] = D.n, half = BOX / 2;
+    // a box outside is staged outside and pulled in; a box already in the fort is staged inside and pushed out
+    if (!P.from) P.from = inRoom(o.x, o.z) ? { x: D.x + nx * 1.5, z: D.z + nz * 1.5 } : D.stage;
+    const aligned = Math.abs((o.x - P.from.x) * nz + (o.z - P.from.z) * nx) < 0.1;
+    const lined = aligned && Math.abs((o.x - D.x) * nx + (o.z - D.z) * nz) < 2.1;
+    if (!P.stage) P.stage = lined ? 'pull' : 'stage';
+    if (P.stage === 'stage') {
+      // stage 1: carry the box to the aligned spot just outside the doorway
+      if (dist(o, P.from) < 0.1) { if (a.held) release(a); P.stage = 'pull'; P.cpath = null; return [0, 0]; }
+      return carry(a, o, P.from, dt) || done();
+    }
+    // stage 2: stand on the fort side of the box, grab, and move it into the doorway (pulling or pushing)
+    const front = { x: o.x + nx * (half + R + 0.1), z: o.z + nz * (half + R + 0.1) };
+    if (!a.held) {
+      if (dist(a, front) > 0.2) return followPath(a, front, [], dt);
+      if (!grab(a, o)) return done();
+    }
+    if (P.t > 30) return done();
+    // do not shut a teammate out: hold the box in the doorway until everyone is inside (or time is short)
+    const out = G.agents.some(b => b !== a && b.team === a.team && !inRoom(b.x, b.z) && !(b.plan && !b.plan.done && b.plan.kind === 'plug'));
+    if (out && G.phase === 'prep' && G.t < PREP - 1.2 && dist(o, D.plug) < 1.6) return [0, 0];
+    const want = { x: D.plug.x - a.grab[0], z: D.plug.z - a.grab[1] };
+    return steerTo(a, want, CARRY * 0.8);
+  }
+  if (P.kind === 'move' || P.kind === 'ramp') {
+    const o = objById(P.obj);
+    if (!o || (o.lockedBy && o.lockedBy !== a.team)) return done();
+    const target = P.target;
+    if (dist(o, target) < (P.kind === 'ramp' ? 0.06 : 0.3) && (P.kind !== 'ramp' || o.dir === P.dir)) {
+      if (a.held) release(a);
+      if (P.lock && !o.lockedBy) { if (reachable(a, o)) toggleLock(a, o); else return followPath(a, o, [], dt); }
+      return done();
+    }
+    if (o.lockedBy === a.team && !a.held) { if (reachable(a, o)) toggleLock(a, o); else return followPath(a, o, [], dt); }
+    if (P.kind === 'ramp' && a.held === o && o.dir !== P.dir) rotateRamp(o, a);   // turn it on the way, wherever it fits
+    if (P.kind === 'ramp' && dist(o, target) < 0.3 && o.dir !== P.dir) { P.spin = (P.spin || 0) + 1; if (P.spin > 90) return done(); }
+    return carry(a, o, target, dt) || done();
+  }
+  if (P.kind === 'lock') {
+    const o = objById(P.obj);
+    if (!o || o.lockedBy) return done();
+    if (reachable(a, o)) { toggleLock(a, o); return done(); }
+    return followPath(a, o, [], dt);
+  }
+  if (P.kind === 'climb') {
+    const o = objById(P.obj);
+    if (!o) return done();
+    const [dx, dz] = DIRV[o.dir];
+    if (P.stage !== 'up') {
+      const foot = { x: o.x - dx * (RAMP_L / 2 + 0.6), z: o.z - dz * (RAMP_L / 2 + 0.6) };
+      if (dist(a, foot) > 0.3) return followPath(a, foot, [], dt);
+      P.stage = 'up'; P.upT = 0;
+    }
+    P.upT += dt;
+    if (P.upT > 3.2 || (a.y < 0.05 && P.upT > 1.2)) return done();
+    // walk straight up the ramp, over the wall, and drop inside
+    const side = dx ? o.z - a.z : o.x - a.x;
+    return [dx * SPEED + (dz ? side * 3 : 0), dz * SPEED + (dx ? side * 3 : 0)];
+  }
+  if (P.kind === 'chase') {
+    const h = agentById(P.who);
+    const target = h && (a.lastSeen?.[h.id] && G.t - a.lastSeen[h.id].t < 1 ? h : a.lastSeen?.[h.id]);
+    if (!target) return done();
+    if (dist(a, target) < 0.8) { a.face += dt * 2; return [0, 0]; }
+    return followPath(a, target, [], dt);
+  }
+  return [0, 0];
+}
+
+// ---------- the brain: options, local scoring, Jev ----------
+// Each AI agent picks one option per decision. Option keys are the same for Jev and the local brain.
+const LABELS = { hide_room: '방 안에 숨기', flee: '술래 피해 도망', block_A: '문 A 막기', block_B: '문 B 막기', lock: '잠그기',
+  hide_ramp: '경사로 숨기기', lock_ramp: '경사로 잠그기', chase: '추격', search_A: '문 A 확인', search_B: '문 B 확인',
+  ramp: '경사로 설치', climb: '경사로로 넘기', sweep: '요새 안 수색', unblock_A: '문 A 뚫기', unblock_B: '문 B 뚫기', patrol: '순찰', wait: '대기' };
+function labelOf(key) {
+  const [k, x] = key.split('__');
+  const extra = x ? ' (' + (agentById(x)?.name || x.replace('box', '상자').replace('ramp', '경사로')) + ')' : '';
+  return (LABELS[k] || k) + extra;
+}
+function options(a) {
+  const o = [];
+  const ramp = objById('ramp');
+  const seekers = G.agents.filter(b => b.team === 'seeker'), hiders = G.agents.filter(b => b.team === 'hider');
+  const nearSeeker = Math.min(...seekers.map(s => dist(s, a)));
+  const seenNow = a.seen;
+  const prep = G.phase === 'prep';
+  const free = x => x && (!x.lockedBy || x.lockedBy === a.team);
+  const taken = key => G.agents.some(b => b !== a && b.team === a.team && b.plan && !b.plan.done && b.plan.key === key);
+  if (a.team === 'hider') {
+    o.push({ key: 'hide_room', desc: 'Walk into the fort room and stay in the corner farthest from both doors.',
+      plan: () => ({ kind: 'goto', target: () => hidingSpot(a), hold: true, retarget: true }),
+      u: (inRoom(a.x, a.z) ? 1.2 : 0.5) + (doorSealed('A') && doorSealed('B') ? 2.4 : 0) - (seenNow ? 0.5 : 0)
+        + (!inRoom(a.x, a.z) && (doorSealed('A') || doorSealed('B') || G.agents.some(b => b.team === 'hider' && b.plan?.stage === 'pull')) ? 1.4 : 0)
+        + (!inRoom(a.x, a.z) && prep && G.t > PREP - 4 ? 2 : 0) });
+    o.push({ key: 'flee', desc: 'Run to a spot out of every seeker\'s line of sight.',
+      plan: () => { const p = fleeSpot(a); return { kind: 'goto', target: () => p }; },
+      u: seenNow ? 2.6 : nearSeeker < 4 ? 1.4 : -0.5 });
+    for (const door of ['A', 'B']) {
+      if (doorSealed(door) && doorBlocker(door).lockedBy) continue;
+      const blocker = doorBlocker(door);
+      const boxes = G.objs.filter(b => b.type === 'box' && free(b) && (!blocker || b === blocker)).sort((p, q) => dist(p, DOORS[door].plug) - dist(q, DOORS[door].plug)).slice(0, 2);
+      for (const b of boxes) {
+        const key = `block_${door}__${b.id}`;
+        if (taken(key) || G.agents.some(x => x !== a && x.team === a.team && x.plan && !x.plan.done && x.plan.door === door)) continue;
+        const busy = G.agents.some(x => x !== a && x.team === 'hider' && x.plan && !x.plan.done && x.plan.obj === b.id);
+        o.push({ key, desc: `Drag ${b.id} into doorway ${door} of the fort and lock it so seekers cannot open it.`,
+          plan: () => ({ kind: 'plug', obj: b.id, door }),
+          u: (prep ? 2.1 : 0.9) + (doorSealed(door) ? 0.6 : 0) - dist(a, b) * 0.12 - dist(b, DOORS[door].plug) * 0.1 - (busy ? 2 : 0) - (seenNow ? 1 : 0) });
+      }
+    }
+    if (ramp && !inRoom(ramp.x, ramp.z) && free(ramp) && !taken('hide_ramp')) {
+      o.push({ key: 'hide_ramp', desc: 'Drag the ramp inside the fort and lock it there, so seekers cannot climb the walls.',
+        plan: () => ({ kind: 'move', obj: 'ramp', target: { x: 8.4, z: 4.2 }, lock: true }),
+        u: (prep ? 1.4 : 0.4) + (doorSealed('A') && doorSealed('B') ? 1.2 : 0) - dist(a, ramp) * 0.15 - (G.t > PREP * 0.75 && prep ? 0.8 : 0) + brain.lessons.ramp * 0.4 });
+    }
+    if (ramp && !ramp.lockedBy && !taken('lock_ramp')) {
+      o.push({ key: 'lock_ramp', desc: 'Lock the ramp where it stands, so seekers cannot move it to a wall.',
+        plan: () => ({ kind: 'lock', obj: 'ramp' }), u: (prep ? 0.8 : 0.2) + (G.t > PREP * 0.6 && prep ? 0.8 : 0) - dist(a, ramp) * 0.06 + brain.lessons.ramp * 2.2 });
+    }
+  } else {
+    for (const h of hiders) {
+      const ls = a.lastSeen?.[h.id] || G.agents.filter(s => s.team === 'seeker').map(s => s.lastSeen?.[h.id]).find(Boolean);
+      if (!ls || G.t - ls.t > 8) continue;
+      o.push({ key: `chase__${h.id}`, desc: `Run to where ${h.id} was last seen ${Math.round(G.t - ls.t)} s ago and keep it in sight.`,
+        plan: () => ({ kind: 'chase', who: h.id }), u: 2.4 - (G.t - ls.t) * 0.25 - dist(a, ls) * 0.05 });
+    }
+    for (const door of ['A', 'B']) {
+      o.push({ key: `search_${door}`, desc: `Go to doorway ${door} and look into the fort room.`,
+        plan: () => ({ kind: 'goto', target: () => doorSealed(door) ? DOORS[door].out : DOORS[door].look, scan: true }),
+        u: (doorSealed(door) ? 0.1 : 1.3) - dist(a, DOORS[door]) * 0.05 - (taken(`search_${door}`) ? 1 : 0) });
+      const b = doorBlocker(door);
+      if (b && !b.lockedBy) o.push({ key: `unblock_${door}`, desc: `Drag the prop out of doorway ${door} to open the fort.`,
+        plan: () => ({ kind: 'move', obj: b.id, target: { x: DOORS[door].out.x - (door === 'B' ? 1.6 : 0), z: DOORS[door].out.z - (door === 'A' ? 1.6 : 0) } }),
+        u: 1.9 - dist(a, b) * 0.08 - (taken(`unblock_${door}`) ? 2 : 0) });
+    }
+    if (ramp && free(ramp)) {
+      const atWall = RAMP_SPOTS.find(s => Math.hypot(s.x - ramp.x, s.z - ramp.z) < 0.15 && s.dir === ramp.dir);
+      if (atWall && !inRoom(a.x, a.z) && a.y < 0.6) o.push({ key: 'climb', desc: 'Climb the ramp that leans on the fort wall and drop inside.',
+        plan: () => ({ kind: 'climb', obj: 'ramp' }), u: 2.6 + (doorSealed('A') && doorSealed('B') ? 1.2 : 0) });
+      else for (const s of RAMP_SPOTS) {
+        const key = `ramp__${s.id}`;
+        if (taken(key) || G.agents.some(x => x !== a && x.plan && !x.plan.done && x.plan.obj === 'ramp')) continue;
+        o.push({ key, desc: `Drag the ramp to the outside of the fort wall at spot ${s.id}, high end against the wall, to climb over it.`,
+          plan: () => ({ kind: 'ramp', obj: 'ramp', target: { x: s.x, z: s.z }, dir: s.dir }),
+          u: (doorSealed('A') || doorSealed('B') ? 1.6 : 0.3) + (doorSealed('A') && doorSealed('B') ? 1 : 0) - Math.hypot(s.x - ramp.x, s.z - ramp.z) * 0.08 });
+      }
+    }
+    if (inRoom(a.x, a.z)) o.push({ key: 'sweep', desc: 'Sweep the fort room, looking into every corner.',
+      plan: () => { const p = { x: 3 + rand() * 6.4, z: 3 + rand() * 6.4 }; return { kind: 'goto', target: () => p, scan: true }; }, u: 1.8 });
+    o.push({ key: 'patrol', desc: 'Walk to a random spot and scan around.',
+      plan: () => { const p = { x: (rand() - .5) * 16, z: (rand() - .5) * 16 }; return { kind: 'goto', target: () => p, scan: true }; }, u: 0.2 });
+  }
+  return o;
+}
+
+function softmax(us, temp = 0.45) {
+  const m = Math.max(...us), e = us.map(u => Math.exp((u - m) / temp)), s = e.reduce((p, q) => p + q, 0);
+  return e.map(x => x / s);
+}
+function teamState(team, opts) {
+  const r = v => Math.round(v * 10) / 10;
+  return {
+    game: 'Box Fort, team hide-and-seek in a 20 x 20 m arena (x right, z down). The fort room is x,z in [2,10] with doorway A at (6,2) and doorway B at (2,6).',
+    rules: 'Before the hunt seekers are frozen. Each second of the hunt, seekers score if any seeker sees any hider, otherwise hiders score. Walls and boxes are 1.1 m high and block sight. Anyone can push or drag a free box or ramp; a locked prop can only be unlocked by the team that locked it. Standing on a ramp against a wall lets you walk over the wall and see over walls.',
+    you: team === 'hider' ? 'hiders (blue)' : 'seekers (red)',
+    phase: G.phase, timeLeft: Math.round(G.phase === 'prep' ? PREP - G.t : PREP + HUNT - G.t), score: G.score,
+    agents: G.agents.map(a => ({ id: a.id, team: a.team, x: r(a.x), z: r(a.z), onTop: a.y > 0.6, inFort: inRoom(a.x, a.z),
+      seenNow: a.team === 'hider' ? a.seen : undefined, plan: a.plan && !a.plan.done ? a.plan.key : 'none' })).filter(a => a.team === team || a.team === 'seeker' || team === 'hider' || a.seenNow),
+    props: G.objs.map(o => ({ id: o.id, type: o.type, x: r(o.x), z: r(o.z), lockedBy: o.lockedBy, rampHighEnd: o.type === 'ramp' ? ['+x', '+z', '-x', '-z'][o.dir] : undefined })),
+    doors: { A: { blockedBy: doorBlocker('A')?.id || null, sealed: doorSealed('A') }, B: { blockedBy: doorBlocker('B')?.id || null, sealed: doorSealed('B') } },
+    memory: brain.memory[team].slice(-4),
+    earlierRounds: brain.history.slice(-3),
+    options: Object.fromEntries(opts.map(([a, os]) => [a.id, os.map(x => x.key)])),
+  };
+}
+
+const brain = {
+  mode: 'local', reason: '확인 중', code: '', endpoint: Q.get('jev') || '/api/jev', next: { hider: 0, seeker: 0 }, busy: { hider: false, seeker: false },
+  memory: { hider: [], seeker: [] }, errors: 0, latency: 0, pressure: { hider: null, seeker: null },
+  // what earlier rounds taught: a counter per beaten defense, carried from round to round (and shown to Jev)
+  lessons: { ramp: 0, rounds: 0 }, history: [],
+  endRound() {
+    const fort = doorSealed('A') && doorSealed('B'), rampLocked = objById('ramp')?.lockedBy === 'hider';
+    this.lessons.rounds++;
+    if (G.fortBroken === 'ramp') this.lessons.ramp = Math.min(3, this.lessons.ramp + 1);
+    else if (rampLocked && G.winner === 'hider') this.lessons.ramp = Math.max(this.lessons.ramp, 1);
+    this.history.push(`round ${this.lessons.rounds}: winner ${G.winner}, fort ${fort ? 'sealed' : 'open'}, ramp ${rampLocked ? 'locked by hiders' : 'free'}${G.fortBroken ? ', fort broken by ' + G.fortBroken : ''}`);
+    try { localStorage.setItem('boxfort.lessons', JSON.stringify({ lessons: this.lessons, history: this.history.slice(-6) })); } catch {}
+  },
+  reset() { G.fortBroken = null; this.next = { hider: 0.2, seeker: 0.2 }; this.memory = { hider: [], seeker: [] }; this.pressure = { hider: null, seeker: null }; },
+  load() {
+    if (!Q.has('fresh')) try { const j = JSON.parse(localStorage.getItem('boxfort.lessons') || 'null'); if (j?.lessons) { this.lessons = j.lessons; this.history = j.history || []; } } catch {}
+    if (Q.has('lesson')) this.lessons.ramp = clamp(+Q.get('lesson'), 0, 3);   // debug: start as if rounds were lost to the ramp
+  },
+  async probe() {
+    this.load();
+    if (Q.get('brain') === 'local') { this.mode = 'local'; this.reason = '로컬 두뇌 (주소 설정)'; return; }
+    try { this.code = sessionStorage.getItem('jevCode') || ''; } catch {}
+    try {
+      const r = await fetch(this.endpoint, { signal: AbortSignal.timeout(4000) });
+      const j = await r.json();
+      if (j.configured) { this.mode = 'jev'; this.reason = 'Jev 연결됨'; this.codeRequired = !!j.codeRequired; }
+      else { this.mode = 'local'; this.reason = '로컬 두뇌 · Jev 키 없음'; }
+    } catch { this.mode = 'local'; this.reason = '로컬 두뇌 · Jev 서버 없음'; }
+  },
+  update(dt) {
+    for (const team of ['hider', 'seeker']) {
+      if (G.phase === 'prep' && team === 'seeker') continue;
+      const ais = G.agents.filter(a => a.team === team && !a.human);
+      if (!ais.length || this.busy[team]) continue;
+      this.next[team] -= dt;
+      const idle = ais.some(a => !a.plan || a.plan.done);
+      if (this.next[team] > 0 && !idle) continue;
+      if (this.next[team] > -0.05 && idle && this.next[team] > 0.6) continue;
+      this.decide(team, ais);
+    }
+  },
+  decide(team, ais) {
+    const opts = ais.map(a => [a, options(a)]);
+    const local = () => opts.map(([a, os]) => {
+      const p = softmax(os.map(x => x.u + (rand() - 0.5) * 0.3));
+      return { a, os, probs: Object.fromEntries(os.map((x, i) => [x.key, p[i]])) };
+    });
+    if (this.mode !== 'jev') { this.apply(team, local(), 'local'); this.next[team] = 0.9; return; }
+    this.busy[team] = true;
+    const t0 = performance.now(), epoch = G.round;
+    const questions = {};
+    for (const [a, os] of opts) questions[`plan_${a.id}`] = { type: 'choice',
+      instructions: `Choose the next plan for ${a.id} (${team}). Plans run for a few seconds; teammates should not pick the same prop. Return probabilities for all choices.`,
+      criteria: Object.fromEntries(os.map(x => [x.key, x.desc])) };
+    questions.pressure = { type: 'score', instructions: team === 'hider' ? 'How likely is it that a seeker sees a hider in the next 10 seconds?' : 'How likely is it that we see a hider in the next 10 seconds?',
+      criteria: ['Very unlikely', 'Unlikely', 'Even', 'Likely', 'Very likely'] };
+    const headers = { 'content-type': 'application/json' }; if (this.code) headers['x-access-code'] = this.code;
+    fetch(this.endpoint, { method: 'POST', headers, body: JSON.stringify({ state: teamState(team, opts), questions }), signal: AbortSignal.timeout(9000) })
+      .then(r => r.json().then(j => { if (!r.ok) throw Object.assign(Error(j.error || r.status), { status: r.status }); return j; }))
+      .then(j => {
+        if (epoch !== G.round) return;
+        this.latency = Math.round(performance.now() - t0);
+        const picks = opts.map(([a, os]) => {
+          const ans = j.answers?.[`plan_${a.id}`];
+          if (!ans || !os.some(x => x.key === ans.choice)) throw Error('format');
+          const probs = Object.fromEntries(os.map(x => [x.key, Number.isFinite(ans.probabilities?.[x.key]) ? ans.probabilities[x.key] : (x.key === ans.choice ? 1 : 0)]));
+          return { a, os, probs, choice: ans.choice };
+        });
+        const pr = j.answers?.pressure; if (pr && Number.isFinite(pr.score)) this.pressure[team] = pr.score / 4;
+        this.errors = 0; this.reason = `Jev 연결됨 · ${this.latency} ms`;
+        this.apply(team, picks, 'jev');
+      })
+      .catch(e => {
+        if (epoch !== G.round) return;
+        this.errors++;
+        if (e.status === 401 && this.codeRequired) this.reason = 'Jev 접속 코드 확인 필요 → 로컬 두뇌';
+        else this.reason = `Jev 오류(${e.status || e.message}) → 로컬 두뇌`;
+        this.apply(team, local(), 'local');
+        if (this.errors >= 5) { this.mode = 'local'; this.reason = 'Jev 연속 오류 → 로컬 두뇌로 전환'; }
+      })
+      .finally(() => { this.busy[team] = false; this.next[team] = 1.4; });
+  },
+  apply(team, picks, source) {
+    G.decisions++;
+    for (const { a, os, probs, choice } of picks) {
+      if (a.human || !G.agents.includes(a)) continue;
+      const fresh = options(a);   // the world moved while Jev was thinking: keep the option only if it still exists
+      let key = choice || Object.entries(probs).sort((p, q) => q[1] - p[1])[0]?.[0];
+      let opt = fresh.find(x => x.key === key);
+      if (!opt) { const best = fresh.map(x => [x, probs[x.key] ?? -1]).sort((p, q) => q[1] - p[1])[0]; opt = best?.[0]; key = opt?.key; }
+      a.decision = { probs, source, at: G.t };
+      if (!opt) continue;
+      const cur = a.plan;
+      const busyCarry = cur && !cur.done && a.held && cur.key !== key && (probs[key] ?? 0) < 0.7;
+      if (cur && !cur.done && (cur.key === key && !(cur.kind === 'goto' && cur.t > 4) || busyCarry)) continue;
+      if (a.held) release(a);
+      a.plan = { key, ...opt.plan(), t: 0 };
+      this.memory[team].push(`${G.t.toFixed(0)}s ${a.id}: ${key}`);
+    }
+  },
+};
+
+// ---------- input ----------
+const keys = new Set(), pressed = new Set();
+addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement) { if (e.code === 'Enter') e.target.blur(); return; }
+  if (!keys.has(e.code)) pressed.add(e.code);
+  keys.add(e.code);
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', e => keys.delete(e.code));
+let padPrev = [];
+function input() {
+  const pad = navigator.getGamepads?.()[0];
+  const b = i => !!pad?.buttons[i]?.pressed, edge = i => b(i) && !padPrev[i];
+  const ax = pad ? pad.axes[0] : 0, ay = pad ? pad.axes[1] : 0;
+  const i = {
+    x: (keys.has('ArrowRight') || keys.has('KeyD') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('KeyA') ? 1 : 0) + (Math.abs(ax) > .2 ? ax : 0),
+    z: (keys.has('ArrowDown') || keys.has('KeyS') ? 1 : 0) - (keys.has('ArrowUp') || keys.has('KeyW') ? 1 : 0) + (Math.abs(ay) > .2 ? ay : 0),
+    grab: keys.has('Space') || b(0), lock: pressed.has('KeyE') || edge(2), rotate: pressed.has('KeyR') || edge(3),
+    start: pressed.has('Enter') || edge(9), back: pressed.has('Escape') || edge(8), panel: pressed.has('KeyH'),
+    m1: pressed.has('Digit1'), m2: pressed.has('Digit2'), m3: pressed.has('Digit3'),
+  };
+  padPrev = pad ? pad.buttons.map(x => x.pressed) : [];
+  pressed.clear();
+  return i;
+}
+
+// ---------- sound: tiny synth blips, no files ----------
+let actx = null;
+function sfx(kind) {
+  try {
+    actx = actx || new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    const f = { grab: [320, 240], lock: [660, 990], unlock: [520, 330], seen: [880, 700], start: [440, 880], end: [600, 300] }[kind] || [400, 400];
+    o.type = kind === 'seen' ? 'sawtooth' : 'triangle';
+    o.frequency.setValueAtTime(f[0], t); o.frequency.exponentialRampToValueAtTime(f[1], t + 0.12);
+    g.gain.setValueAtTime(kind === 'seen' ? 0.03 : 0.07, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.2);
+  } catch {}
+}
+
+// ---------- UI ----------
+let panelOn = Q.get('panel') !== '0';
+function startGame(mode) {
+  try { const c = $('code').value.trim(); if (c) { brain.code = c; sessionStorage.setItem('jevCode', c); } } catch {}
+  G.round = (G.round || 0) + 1;
+  newRound(mode);
+  $('title').hidden = true; $('end').hidden = true;
+  for (const id of ['top', 'brain']) $(id).hidden = false;
+  $('panel').hidden = !panelOn;
+  $('help').hidden = mode === 'watch';
+  sfx('start');
+}
+function toTitle() {
+  G.phase = 'title'; $('title').hidden = false; $('end').hidden = true;
+  for (const id of ['top', 'panel', 'brain', 'help']) $(id).hidden = true;
+  $('brainTitle').textContent = 'AI: ' + brain.reason;
+  $('codeBox').hidden = !(brain.mode === 'jev' && brain.codeRequired);
+}
+document.querySelectorAll('#title button').forEach(b => b.addEventListener('click', () => startGame(b.dataset.mode)));
+function renderPanel() {
+  const col = t => t === 'hider' ? '#0f8fc0' : '#d8303f';
+  $('agents').innerHTML = G.agents.map(a => {
+    const d = a.decision, top = d ? Object.entries(d.probs).sort((p, q) => q[1] - p[1]).slice(0, 3) : [];
+    const plan = a.human ? '플레이어' : a.plan && !a.plan.done ? labelOf(a.plan.key) : G.phase === 'prep' && a.team === 'seeker' ? '준비 시간 · 대기' : '판단 대기';
+    return `<div class="ag"><span class="n" style="color:${col(a.team)}">${a.name}</span> <span class="p">${plan}${a.seen ? ' · 발각' : ''}</span>` +
+      (a.human ? '' : top.map(([k, p]) => `<div class="bar"><span style="display:grid;grid-template-columns:96px 1fr;gap:4px;align-items:center"><span>${labelOf(k)}</span><i><b style="width:${(p * 100).toFixed(0)}%;background:${col(a.team)}"></b></i></span><span>${(p * 100).toFixed(0)}%</span></div>`).join('')) + '</div>';
+  }).join('');
+  $('dec').textContent = `${brain.lessons.rounds + 1}판째 · 판단 ${G.decisions}회`;
+}
+
+// ---------- loop ----------
+function syncObj(o) {
+  o.g.position.set(o.x, 0, o.z);
+  o.g.rotation.y = o.type === 'ramp' ? -o.dir * Math.PI / 2 : 0;
+  o.mat.color.setHex(o.lockedBy ? PALETTE.locked : PALETTE.box);
+  o.lines.visible = !!o.lockedBy;
+  if (o.lockedBy) o.lines.material.color.setHex(o.lockedBy === 'hider' ? 0x9fe8ff : 0xffb0b8);
+  const held = G.agents.some(a => a.held === o);
+  o.mat.emissive.setHex(held ? 0x553300 : 0x000000);
+}
+function syncAgent(a, dt) {
+  a.g.position.set(a.x, a.y, a.z);
+  a.g.rotation.y = -a.face + Math.PI / 2;
+  const frozen = G.phase === 'prep' && a.team === 'seeker';
+  a.mat.emissiveIntensity = frozen ? 0.15 : a.seen ? 1.1 : 0.55;
+  a.ring.material.opacity = a.human ? 0.95 : frozen ? 0.2 : 0.5;
+  a.ring.scale.setScalar(a.human ? 1.15 + Math.sin(G.t * 5) * 0.06 : 1);
+  a.body.position.y = 0.42 + (a.moved > 0 ? Math.abs(Math.sin(G.t * 14)) * 0.05 : 0);
+  if (a.cone) { a.cone.position.set(a.x, a.y + 0.03, a.z); a.cone.rotation.z = a.face; a.cone.visible = !frozen && G.phase !== 'end'; a.cone.rotation.x = -Math.PI / 2; a.cone.rotation.order = 'XYZ'; }
+}
+
+const clock = new THREE.Clock();
+const camTarget = new THREE.Vector3(0, 0, 0.5);
+function frame() {
+  const real = Math.min(clock.getDelta(), 1 / 20);
+  const i = input();
+  for (let k = 0; k < STEPS; k++) simulate(STEPS > 1 ? 1 / 30 : real, k === 0 ? i : NOINPUT);
+  render(real);
+  requestAnimationFrame(frame);
+}
+const NOINPUT = { x: 0, z: 0, grab: false };
+function simulate(dt, i) {
+  if (G.phase === 'title') {
+    if (i.m1) startGame('hider'); else if (i.m2) startGame('seeker'); else if (i.m3 || i.start) startGame('watch');
+  } else if (i.back) toTitle();
+  if (i.panel && G.phase !== 'title') { panelOn = !panelOn; $('panel').hidden = !panelOn; }
+
+  if (G.phase === 'prep' || G.phase === 'hunt') {
+    G.t += dt;
+    if (G.phase === 'prep' && G.t >= PREP) { G.phase = 'hunt'; sfx('start'); }
+    brain.update(dt);
+    for (const a of G.agents) {
+      const frozen = G.phase === 'prep' && a.team === 'seeker';
+      let v = [0, 0];
+      if (frozen) { /* seekers wait, facing the wall */ }
+      else if (a.human) {
+        const len = Math.hypot(i.x, i.z) || 1, sp = a.held ? CARRY : SPEED;
+        v = [i.x / Math.max(1, len) * sp, i.z / Math.max(1, len) * sp];
+        if (i.grab && !a.held) grab(a, nearestReachable(a));
+        if (!i.grab && a.held) release(a);
+        if (i.lock) toggleLock(a, a.held || nearestReachable(a));
+        if (i.rotate && a.held) rotateRamp(a.held, a);
+      } else {
+        v = runPlan(a, dt);
+        // stuck detection: no progress for a while ends the plan so the brain chooses again
+        // stuck detection: wanting to move without getting anywhere ends the plan so the brain chooses again
+        if (a.plan && !a.plan.done) {
+          const want = Math.hypot(...v) > 0.5;
+          if (!want) a.prog = null;
+          else if (!a.prog) a.prog = { x: a.x, z: a.z, t: 0 };
+          else if ((a.prog.t += dt) > 2.2) { if (Math.hypot(a.x - a.prog.x, a.z - a.prog.z) < 0.35) { if (a.held) release(a); a.plan.done = true; } a.prog = null; }
+        }
+      }
+      stepAgent(a, v[0], v[1], dt);
+      if (a.held && !reachable(a, a.held) && Math.hypot(a.held.x - a.x - a.grab[0], a.held.z - a.z - a.grab[1]) > 0.3) release(a);
+    }
+    // vision and scoring
+    let li = 0;
+    for (const h of G.agents) if (h.team === 'hider') h.seen = false;
+    if (G.phase === 'hunt') for (const s of G.agents.filter(a => a.team === 'seeker')) for (const h of G.agents.filter(a => a.team === 'hider')) {
+      if (!sees(s, h)) continue;
+      if (!h.seen && G.t - h.lastSeenBy > 1.5) sfx('seen');
+      h.seen = true; h.lastSeenBy = G.t;
+      if (inRoom(h.x, h.z) && doorSealed('A') && doorSealed('B')) G.fortBroken = s.y > 0.6 || inRoom(s.x, s.z) ? 'ramp' : 'other';
+      s.lastSeen = s.lastSeen || {}; s.lastSeen[h.id] = { x: h.x, z: h.z, t: G.t };
+      const l = lasers[li++]; if (!l) continue;
+      const p0 = new THREE.Vector3(s.x, s.y + 0.95, s.z), p1 = new THREE.Vector3(h.x, h.y + 0.75, h.z);
+      l.position.copy(p0).lerp(p1, 0.5); l.scale.set(1, p0.distanceTo(p1), 1);
+      l.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p1.clone().sub(p0).normalize()); l.visible = true;
+    }
+    for (; li < lasers.length; li++) lasers[li].visible = false;
+    if (G.phase === 'hunt') {
+      G.tick += dt;
+      while (G.tick >= 1) { G.tick -= 1; if (G.agents.some(a => a.team === 'hider' && a.seen)) G.score.seeker++; else G.score.hider++; }
+      if (G.t >= PREP + HUNT) {
+        G.phase = 'end'; G.endT = 0; sfx('end');
+        G.winner = G.score.hider > G.score.seeker ? 'hider' : G.score.seeker > G.score.hider ? 'seeker' : 'draw';
+        brain.endRound();
+        $('endTitle').textContent = G.winner === 'hider' ? '파랑 팀 승리' : G.winner === 'seeker' ? '빨강 팀 승리' : '무승부';
+        $('endText').textContent = `숨은 시간 ${G.score.hider}초 · 들킨 시간 ${G.score.seeker}초 · AI 판단 ${G.decisions}회`;
+        $('end').hidden = false;
+      }
+    }
+  } else if (G.phase === 'end') {
+    G.endT += dt;
+    if (i.start) startGame(G.mode);
+    else if (G.mode === 'watch' && G.endT > 6) { seed0++; startGame('watch'); }
+  }
+}
+function render(dt) {
+
+  for (const a of G.agents) syncAgent(a, dt);
+  for (const o of G.objs) syncObj(o);
+  if (G.phase !== 'title') {
+    $('sh').textContent = `파랑 ${G.score.hider}`; $('ss').textContent = `빨강 ${G.score.seeker}`;
+    $('tm').textContent = G.phase === 'prep' ? `준비 ${Math.ceil(PREP - G.t)}` : G.phase === 'hunt' ? `${Math.ceil(PREP + HUNT - G.t)}초` : '끝';
+    $('brain').textContent = 'AI: ' + brain.reason;
+    if (panelOn && (G.frame = (G.frame || 0) + 1) % 10 === 0) renderPanel();
+  }
+
+  // camera: the clip's high three-quarter view of the whole arena, leaning toward the player
+  const h = human();
+  const aim = h ? new THREE.Vector3(h.x * 0.35, 0, h.z * 0.35 + 0.5) : new THREE.Vector3(Math.sin(G.t * 0.1) * 0.6, 0, 0.5);
+  camTarget.lerp(aim, 1 - Math.exp(-2 * dt));
+  const portrait = innerHeight > innerWidth;
+  const back = portrait ? 1.9 : panelOn && innerWidth > 700 ? 1.07 : 1;
+  camera.position.set(camTarget.x, 21 * back, camTarget.z + 15 * back);
+  camera.lookAt(camTarget.x, 0, camTarget.z + 0.3);
+  // keep the arena clear of the AI panel on wide screens
+  if (panelOn && !portrait && G.phase !== 'title' && innerWidth > 700) camera.setViewOffset(innerWidth, innerHeight, 105, 0, innerWidth, innerHeight);
+  else camera.clearViewOffset();
+  grade.uniforms.uTime.value += dt;
+  composer.render();
+}
+
+window.__game = { get state() {
+  const p = human();
+  return { phase: G.phase, mode: G.mode, t: +G.t.toFixed(2), prep: PREP, hunt: HUNT, score: { ...G.score }, brain: brain.mode, decisions: G.decisions,
+    player: p ? { id: p.id, team: p.team, x: p.x, z: p.z, y: p.y, holding: p.held?.id || null, seen: p.seen } : null,
+    agents: G.agents.map(a => ({ id: a.id, team: a.team, x: a.x, z: a.z, y: a.y, plan: a.plan && !a.plan.done ? a.plan.key : null, seen: a.seen, holding: a.held?.id || null })),
+    objects: G.objs.map(o => ({ id: o.id, type: o.type, x: o.x, z: o.z, dir: o.dir, lockedBy: o.lockedBy })),
+    doors: { A: doorBlocker('A')?.id || null, B: doorBlocker('B')?.id || null, sealedA: doorSealed('A'), sealedB: doorSealed('B') },
+    rampSpots: RAMP_SPOTS, plugs: { A: DOORS.A.plug, B: DOORS.B.plug } };
+} };
+
+if (Q.has('debug')) window.__dbg = { G, findPath, objFree, objRect, carry, options };
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+await brain.probe();
+$('brainTitle').textContent = 'AI: ' + brain.reason;
+$('codeBox').hidden = !(brain.mode === 'jev' && brain.codeRequired);
+const qm = Q.get('mode') || (Q.has('autostart') ? 'watch' : null);
+if (qm) startGame(qm); else G.phase = 'title';
+// ?manual: the recorder advances one frame at a time (window.__frame()), each frame STEPS x 1/30 s of game time
+if (Q.has('manual')) window.__skip = t => { while (G.t < t && G.phase !== 'end') simulate(1 / 30, NOINPUT); };
+if (Q.has('manual')) window.__frame = () => { const i = input(); for (let k = 0; k < STEPS; k++) simulate(1 / 30, k === 0 ? i : NOINPUT); render(1 / 30 * STEPS); };
+else frame();
+</script>
+</body>
+</html>
